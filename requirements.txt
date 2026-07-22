@@ -1,0 +1,44 @@
+# ===== Core UI =====
+streamlit
+
+# ===== Audio Acquisition =====
+yt-dlp          # Download audio from YouTube URLs
+pytube          # Fallback YouTube downloader (optional)
+
+# ===== Audio Processing =====
+pydub
+audioop-lts 
+ffmpeg-python
+
+# ===== Speech-to-Text (Local Whisper) =====
+# faster-whisper uses CTranslate2 (not numba/llvmlite), so it installs
+# cleanly on Python 3.13. It's also faster and lighter than openai-whisper.
+faster-whisper
+torch
+
+# ===== Translation (Hindi -> English) =====
+transformers
+sentencepiece
+sacremoses
+
+# ===== LangChain + LCEL =====
+langchain
+langchain-core
+langchain-community
+langchain-mistralai
+
+# ===== RAG: Vector Store & Embeddings =====
+chromadb
+langchain-huggingface
+sentence-transformers
+
+# ===== PDF / TXT Export =====
+fpdf2
+reportlab
+
+# ===== Utilities =====
+python-dotenv
+tqdm
+numpy
+pandas
+requests
