@@ -111,7 +111,7 @@ def transcribe_chunk_sarvam(
                     file=f,
                     model=SARVAM_STT_MODEL,
                     language_code=language_code,
-                    mode="transcribe",
+                    mode="translate",
                     input_audio_codec="wav",
                 )
 
