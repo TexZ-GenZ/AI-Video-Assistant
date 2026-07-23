@@ -1,6 +1,11 @@
 # ===== Core UI =====
 streamlit
 
+# ===== FastAPI Server =====
+fastapi
+uvicorn
+python-multipart
+
 # ===== Audio Acquisition =====
 yt-dlp          # Download audio from YouTube URLs
 pytube          # Fallback YouTube downloader (optional)
