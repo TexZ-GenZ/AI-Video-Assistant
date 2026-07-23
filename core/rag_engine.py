@@ -51,7 +51,5 @@ def load_rag_chain():
     return create_rag_chain(vector_store)
 
 def ask_question(rag_chain , question : str) -> str:
-    print("Question: ", question)
-    answer = rag_chain.invoke({"question" : question})
-    print("Answer: ", answer)
+    answer = rag_chain.invoke(question)
     return answer

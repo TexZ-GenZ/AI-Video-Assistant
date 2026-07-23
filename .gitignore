@@ -3,3 +3,4 @@
 downloads/
 __pycache__/
 uv.lock
+vector_db/
