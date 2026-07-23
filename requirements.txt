@@ -42,3 +42,6 @@ tqdm
 numpy
 pandas
 requests
+
+torch
+sarvamai
