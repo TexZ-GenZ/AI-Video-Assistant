@@ -45,3 +45,4 @@ requests
 
 torch
 sarvamai
+langchain_chroma
