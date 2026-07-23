@@ -7,21 +7,21 @@ Drop a YouTube link or upload a video file. Get a transcript, summary, action it
 ## Architecture
 
 ```mermaid
-flowchart LR
-    Source["🎥 YouTube /<br>📁 File"] -->|"yt-dlp / pydub"| Audio["WAV chunks<br>(10 min, 16kHz mono)"]
-    Audio -->|"faster-whisper (EN)<br>Sarvam AI (HI → EN)"| Transcript["Raw Transcript<br>─────────────"]
+flowchart TB
+    Source["YouTube URL or Local File"] -->|"yt-dlp / pydub"| Audio["WAV chunks (10 min, 16kHz mono)"]
+    Audio -->|"faster-whisper (English)<br>Sarvam AI (Hindi → English)"| Transcript["Raw Transcript"]
 
     Transcript -->|"RecursiveCharacterTextSplitter<br>(500 chars, 50 overlap)"| Chunks["Text Chunks"]
-    Chunks -->|"MistralAIEmbeddings<br>(mistral-embed)"| Chroma["ChromaDB<br>Vector Store"]
+    Chunks -->|"MistralAIEmbeddings<br>(mistral-embed)"| Chroma["ChromaDB Vector Store"]
 
-    Transcript -->|"Map-Reduce<br>(mistral-small-2603)"| Summary["📝 Summary"]
-    Transcript -->|"LCEL Chain"| Actions["✅ Action Items"]
-    Transcript -->|"LCEL Chain"| KeyInfo["📊 Key Information"]
-    Transcript -->|"LCEL Chain"| Questions["❓ Questions"]
+    Transcript -->|"Map-Reduce"| Summary["Summary<br>(mistral-small-2603)"]
+    Transcript -->|"LCEL Chain"| Actions["Action Items"]
+    Transcript -->|"LCEL Chain"| KeyInfo["Key Information"]
+    Transcript -->|"LCEL Chain"| Questions["Questions Raised"]
 
-    Chroma -->|"MMR Retrieval<br>(k=4, fetch_k=10)"| RAG["RAG Chain<br>(mistral-small-2603)"]
-    UserQ["🙋 User Question"] --> RAG
-    RAG -->|"grounded in<br>transcript"| Answer["💬 Answer"]
+    Chroma -->|"MMR Retrieval (k=4, fetch_k=10)"| RAG["RAG Chain (mistral-small-2603)"]
+    UserQ["User Question"] --> RAG
+    RAG -->|"Answer grounded in transcript"| Answer["Response"]
 ```
 
 ### Pipeline flow
