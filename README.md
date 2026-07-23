@@ -7,29 +7,21 @@ Drop a YouTube link or upload a video file. Get a transcript, summary, action it
 ## Architecture
 
 ```mermaid
-flowchart TB
-    subgraph Frontend["React Frontend"]
-        Input["Input Section"]
-        Processing["Processing Animation"]
-        Results["Summary + Chat"]
-    end
+flowchart LR
+    Source["🎥 YouTube /<br>📁 File"] -->|"yt-dlp / pydub"| Audio["WAV chunks<br>(10 min, 16kHz mono)"]
+    Audio -->|"faster-whisper (EN)<br>Sarvam AI (HI → EN)"| Transcript["Raw Transcript<br>─────────────"]
 
-    subgraph Backend["FastAPI Backend"]
-        API["REST API"]
-        Jobs["SQLite Job Store"]
-        Pool["ThreadPoolExecutor"]
-    end
+    Transcript -->|"RecursiveCharacterTextSplitter<br>(500 chars, 50 overlap)"| Chunks["Text Chunks"]
+    Chunks -->|"MistralAIEmbeddings<br>(mistral-embed)"| Chroma["ChromaDB<br>Vector Store"]
 
-    subgraph Pipeline["Core Pipeline"]
-        Audio["audio_processor\n• yt-dlp download\n• pydub → 16kHz WAV\n• 10-min chunks"]
-        Transcribe["transcriber\n• faster-whisper (English)\n• Sarvam AI (Hindi)"]
-        Analyze["summarize + extractor\n• Map-reduce summary\n• Action items\n• Key info\n• Questions\n(Mistral LLM)"]
-        Index["rag_engine\n• ChromaDB\n• Mistral embeddings\n• MMR retrieval\n• LCEL Q&A chain"]
-    end
+    Transcript -->|"Map-Reduce<br>(mistral-small-2603)"| Summary["📝 Summary"]
+    Transcript -->|"LCEL Chain"| Actions["✅ Action Items"]
+    Transcript -->|"LCEL Chain"| KeyInfo["📊 Key Information"]
+    Transcript -->|"LCEL Chain"| Questions["❓ Questions"]
 
-    Frontend -->|"REST (JSON)"| Backend
-    Backend -->|"calls"| Pipeline
-    Audio --> Transcribe --> Analyze --> Index
+    Chroma -->|"MMR Retrieval<br>(k=4, fetch_k=10)"| RAG["RAG Chain<br>(mistral-small-2603)"]
+    UserQ["🙋 User Question"] --> RAG
+    RAG -->|"grounded in<br>transcript"| Answer["💬 Answer"]
 ```
 
 ### Pipeline flow
