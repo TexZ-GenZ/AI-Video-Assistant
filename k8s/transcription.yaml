@@ -1,0 +1,41 @@
+# Transcription worker: CPU whisper (model cached on EFS so cold pods don't
+# re-download ~460MB of weights).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: transcription-worker
+  namespace: default
+spec:
+  replicas: 0  # KEDA scales from 0 based on SQS depth
+  selector:
+    matchLabels:
+      app: transcription-worker
+  template:
+    metadata:
+      labels:
+        app: transcription-worker
+    spec:
+      imagePullSecrets:
+        - name: ecr-cred
+      containers:
+        - name: worker
+          image: YOUR_ECR_ACCOUNT/videosense/transcription:latest
+          envFrom:
+            - configMapRef:
+                name: videosense-config
+            - secretRef:
+                name: videosense-secrets
+          volumeMounts:
+            - name: whisper-cache
+              mountPath: /models
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+      volumes:
+        - name: whisper-cache
+          persistentVolumeClaim:
+            claimName: whisper-cache-pvc

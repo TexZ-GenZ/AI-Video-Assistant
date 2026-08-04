@@ -1,0 +1,93 @@
+# Summarization service: API + worker.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: summarization-api
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: summarization-api
+  template:
+    metadata:
+      labels:
+        app: summarization-api
+    spec:
+      imagePullSecrets:
+        - name: ecr-cred
+      containers:
+        - name: api
+          image: YOUR_ECR_ACCOUNT/videosense/summarization:latest
+          ports:
+            - containerPort: 8002
+          envFrom:
+            - configMapRef:
+                name: videosense-config
+            - secretRef:
+                name: videosense-secrets
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: summarization-api
+  namespace: default
+spec:
+  selector:
+    app: summarization-api
+  ports:
+    - port: 8002
+      targetPort: 8002
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: summarization-worker
+  namespace: default
+spec:
+  replicas: 1  # chat depends on it — keep one warm
+  selector:
+    matchLabels:
+      app: summarization-worker
+  template:
+    metadata:
+      labels:
+        app: summarization-worker
+    spec:
+      imagePullSecrets:
+        - name: ecr-cred
+      containers:
+        - name: worker
+          image: YOUR_ECR_ACCOUNT/videosense/summarization:latest
+          command: ["python", "-m", "services.summarization.worker"]
+          envFrom:
+            - configMapRef:
+                name: videosense-config
+            - secretRef:
+                name: videosense-secrets
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "1"
+              memory: 2Gi

@@ -1,0 +1,93 @@
+# Ingestion service: API + worker.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingestion-api
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ingestion-api
+  template:
+    metadata:
+      labels:
+        app: ingestion-api
+    spec:
+      imagePullSecrets:
+        - name: ecr-cred
+      containers:
+        - name: api
+          image: YOUR_ECR_ACCOUNT/videosense/ingestion:latest
+          ports:
+            - containerPort: 8001
+          envFrom:
+            - configMapRef:
+                name: videosense-config
+            - secretRef:
+                name: videosense-secrets
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingestion-api
+  namespace: default
+spec:
+  selector:
+    app: ingestion-api
+  ports:
+    - port: 8001
+      targetPort: 8001
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingestion-worker
+  namespace: default
+spec:
+  replicas: 0  # KEDA scales from 0 based on SQS depth
+  selector:
+    matchLabels:
+      app: ingestion-worker
+  template:
+    metadata:
+      labels:
+        app: ingestion-worker
+    spec:
+      imagePullSecrets:
+        - name: ecr-cred
+      containers:
+        - name: worker
+          image: YOUR_ECR_ACCOUNT/videosense/ingestion:latest
+          command: ["python", "-m", "services.ingestion.worker"]
+          envFrom:
+            - configMapRef:
+                name: videosense-config
+            - secretRef:
+                name: videosense-secrets
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "1"
+              memory: 2Gi

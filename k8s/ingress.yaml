@@ -1,0 +1,40 @@
+# Internet-facing ALB with path-based routing:
+#   /api/upload, /api/process  → ingestion
+#   everything else            → summarization
+# target-type: ip is REQUIRED on Fargate (pods have their own ENIs).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: videosense-ingress
+  namespace: default
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          - path: /api/upload
+            pathType: Prefix
+            backend:
+              service:
+                name: ingestion-api
+                port:
+                  number: 8001
+          - path: /api/process
+            pathType: Prefix
+            backend:
+              service:
+                name: ingestion-api
+                port:
+                  number: 8001
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: summarization-api
+                port:
+                  number: 8002

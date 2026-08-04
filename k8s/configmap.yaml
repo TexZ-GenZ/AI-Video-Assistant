@@ -1,0 +1,24 @@
+# Shared environment for all VideoSense pods.
+# Placeholders (YOUR_*) are substituted by apply.sh from infra/.videosense.env.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: videosense-config
+  namespace: default
+data:
+  AWS_REGION: YOUR_AWS_REGION
+  JOBS_TABLE: videosense-jobs
+  JOBS_BUCKET: YOUR_BUCKET
+  JOBS_QUEUE: videosense-jobs
+  TRANSCRIBE_QUEUE: videosense-transcribe
+  SUMMARIZE_QUEUE: videosense-summarize
+  CORS_ORIGINS: YOUR_CORS_ORIGIN
+  # Chroma server mode (shared server on EKS)
+  CHROMA_MODE: "http"
+  CHROMA_HOST: chroma
+  CHROMA_PORT: "8000"
+  # Whisper (CPU on Fargate)
+  WHISPER_MODEL: small
+  WHISPER_DEVICE: cpu
+  WHISPER_CACHE_DIR: /models
+  MAX_UPLOAD_MB: "500"

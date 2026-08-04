@@ -1,0 +1,100 @@
+# ── API autoscaling: CPU-based HPA ─────────────────────────────────────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ingestion-api-hpa
+  namespace: default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ingestion-api
+  minReplicas: 1
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: summarization-api-hpa
+  namespace: default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: summarization-api
+  minReplicas: 1
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+# ── Worker autoscaling: KEDA on SQS queue depth ────────────────────────────
+# identityOwner: operator → the keda-operator IRSA role (created in
+# infra/aws-provision.sh) authorizes the SQS/CloudWatch reads.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: ingestion-worker-scaledobject
+  namespace: default
+spec:
+  scaleTargetRef:
+    name: ingestion-worker
+    kind: Deployment
+  minReplicaCount: 0
+  maxReplicaCount: 4
+  triggers:
+    - type: aws-sqs
+      metadata:
+        queueURL: https://sqs.YOUR_AWS_REGION.amazonaws.com/YOUR_ACCOUNT_ID/videosense-jobs
+        queueLength: "5"
+        awsRegion: YOUR_AWS_REGION
+        identityOwner: operator
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: transcription-worker-scaledobject
+  namespace: default
+spec:
+  scaleTargetRef:
+    name: transcription-worker
+    kind: Deployment
+  minReplicaCount: 0
+  maxReplicaCount: 4
+  triggers:
+    - type: aws-sqs
+      metadata:
+        queueURL: https://sqs.YOUR_AWS_REGION.amazonaws.com/YOUR_ACCOUNT_ID/videosense-transcribe
+        queueLength: "5"
+        awsRegion: YOUR_AWS_REGION
+        identityOwner: operator
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: summarization-worker-scaledobject
+  namespace: default
+spec:
+  scaleTargetRef:
+    name: summarization-worker
+    kind: Deployment
+  minReplicaCount: 1  # chat depends on it — never scale to zero
+  maxReplicaCount: 4
+  triggers:
+    - type: aws-sqs
+      metadata:
+        queueURL: https://sqs.YOUR_AWS_REGION.amazonaws.com/YOUR_ACCOUNT_ID/videosense-summarize
+        queueLength: "5"
+        awsRegion: YOUR_AWS_REGION
+        identityOwner: operator

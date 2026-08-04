@@ -1,0 +1,68 @@
+# Self-hosted ChromaDB server (shared by all summarization pods via
+# CHROMA_MODE=http). Single replica: sqlite-on-EFS is single-writer.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chroma
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: chroma
+  template:
+    metadata:
+      labels:
+        app: chroma
+    spec:
+      containers:
+        - name: chroma
+          image: chromadb/chroma:1.5.9
+          args: ["--workers", "1", "--host", "0.0.0.0", "--port", "8000"]
+          env:
+            - name: IS_PERSISTENT
+              value: "TRUE"
+            - name: PERSIST_DIRECTORY
+              value: /data/chroma
+            - name: ANONYMIZED_TELEMETRY
+              value: "FALSE"
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /api/v1/heartbeat
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/v1/heartbeat
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          volumeMounts:
+            - name: chroma-data
+              mountPath: /data
+      volumes:
+        - name: chroma-data
+          persistentVolumeClaim:
+            claimName: chroma-data-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chroma
+  namespace: default
+spec:
+  selector:
+    app: chroma
+  ports:
+    - port: 8000
+      targetPort: 8000
