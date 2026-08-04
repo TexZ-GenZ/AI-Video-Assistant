@@ -64,6 +64,12 @@ def upload_text(key: str, text: str) -> None:
     upload_bytes(key, text.encode("utf-8"), "text/plain")
 
 
+def upload_fileobj(key: str, fileobj, content_type: str | None = None) -> None:
+    """Stream a file-like object to S3 (multipart under the hood)."""
+    extra = {"ContentType": content_type} if content_type else None
+    _client().upload_fileobj(fileobj, BUCKET, key, ExtraArgs=extra)
+
+
 def download_bytes(key: str) -> bytes:
     resp = _client().get_object(Bucket=BUCKET, Key=key)
     return resp["Body"].read()
@@ -81,3 +87,18 @@ def delete_prefix(prefix: str) -> None:
         keys = [{"Key": obj["Key"]} for obj in page.get("Contents", [])]
         if keys:
             client.delete_objects(Bucket=BUCKET, Delete={"Objects": keys})
+
+
+def list_keys(prefix: str) -> list[str]:
+    """Return all object keys under a prefix."""
+    client = _client()
+    out: list[str] = []
+    for page in client.get_paginator("list_objects_v2").paginate(Bucket=BUCKET, Prefix=prefix):
+        out.extend(obj["Key"] for obj in page.get("Contents", []))
+    return out
+
+
+def download_to_path(key: str, path: str) -> None:
+    """Download an object to a local file path."""
+    with open(path, "wb") as f:
+        _client().download_fileobj(BUCKET, key, f)
