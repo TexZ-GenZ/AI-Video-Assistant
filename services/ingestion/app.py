@@ -20,7 +20,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from shared.models import ProcessRequest, ProcessResponse, UploadResponse
-from db import create_job
+from shared.dynamo import create_job
 import shared.pipeline as pipeline
 
 UPLOAD_DIR = Path("downloads/uploads")

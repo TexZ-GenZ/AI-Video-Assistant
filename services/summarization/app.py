@@ -17,7 +17,7 @@ from __future__ import annotations
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from db import get_job, get_transcript, list_jobs, delete_job
+from shared.dynamo import get_job, get_transcript, list_jobs, delete_job
 from shared.models import (
     StatusResponse,
     Results,

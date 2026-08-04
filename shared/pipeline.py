@@ -14,8 +14,7 @@ import traceback
 from urllib.parse import urlparse
 from pathlib import Path
 
-from db import (
-    create_job,
+from shared.dynamo import (
     update_progress,
     set_done,
     set_error,
