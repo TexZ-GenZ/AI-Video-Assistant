@@ -6,7 +6,7 @@ Exposes:
   GET  /api/process/{job_id}/results  — structured analysis results
   POST /api/process/{job_id}/ask      — chat with the video (RAG)
   GET  /api/jobs                      — history sidebar
-  DELETE /api/jobs/{job_id}           — remove a job
+  DELETE /api/jobs/{job_id}           — remove a job and all its data
   GET  /health
 
 Run with:  uvicorn services.summarization.app:app --reload
@@ -14,9 +14,14 @@ Run with:  uvicorn services.summarization.app:app --reload
 
 from __future__ import annotations
 
+from urllib.parse import urlparse
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from shared import s3
+from shared.config import cors_origins
 from shared.dynamo import get_job, get_transcript, list_jobs, delete_job
 from shared.models import (
     StatusResponse,
@@ -26,23 +31,39 @@ from shared.models import (
     JobSummary,
     JobsResponse,
 )
-from shared.pipeline import source_label
 from services.summarization.worker import (
     get_rag_chain,
     drop_rag_chain,
     register_rag_chain,
     build_job_rag,
+    drop_job_collection,
 )
 from services.summarization.rag import ask_question
 
-app = FastAPI(title="VideoSense Summarization API", version="0.1.0")
+app = FastAPI(title="VideoSense Summarization API", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # tighten in production (CORS_ORIGINS env)
+    allow_origins=cors_origins(),
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _source_label(source: str) -> str:
+    """Human-readable label for the history sidebar."""
+    if source.startswith("http://") or source.startswith("https://"):
+        parsed = urlparse(source)
+        path = parsed.path.strip("/")
+        if path:
+            tail = path.split("/")[-1]
+            return tail[:40] if tail else parsed.netloc
+        return parsed.netloc
+    # file_id — look up the original filename in the S3 staging area
+    keys = s3.list_keys(f"uploads/{source}")
+    if keys:
+        return Path(sorted(keys)[0]).name[:40]
+    return source[:40]
 
 
 @app.get("/health")
@@ -97,12 +118,12 @@ def ask(job_id: str, req: AskRequest):
     rag_chain = get_rag_chain(job_id)
 
     if rag_chain is None:
-        # RAG chain wasn't kept (e.g. cold pod) — rebuild from stored transcript
+        # Cold pod (or restart) — rebuild the chain from the stored transcript
         job = get_job(job_id)
         if job and job["status"] == "done":
             transcript = get_transcript(job_id)
             if transcript:
-                rag_chain = build_job_rag(transcript)
+                rag_chain = build_job_rag(transcript, job_id)
                 register_rag_chain(job_id, rag_chain)
             else:
                 raise HTTPException(
@@ -126,7 +147,7 @@ def jobs_list():
         jobs=[
             JobSummary(
                 job_id=j["job_id"],
-                title=j.get("title") or source_label(j.get("source", "")),
+                title=j.get("title") or _source_label(j.get("source", "")),
                 status=j["status"],
                 created_at=j["created_at"],
             )
@@ -139,8 +160,22 @@ def jobs_list():
 
 @app.delete("/api/jobs/{job_id}")
 def delete_job_endpoint(job_id: str):
-    """Remove a job and its RAG chain from memory."""
+    """Remove a job and ALL its data: RAG chain, Chroma collection, S3
+    objects (chunks + transcript + staged upload), and the DynamoDB row."""
+    job = get_job(job_id)
+
     drop_rag_chain(job_id)
+    drop_job_collection(job_id)
+
+    # S3: job artifacts + the staged upload if the source was a file_id
+    s3.delete_prefix(s3.job_prefix(job_id))
+    if job and job.get("source"):
+        source = job["source"]
+        if not (
+            source.startswith("http://") or source.startswith("https://")
+        ) and "/" not in source and "\\" not in source:
+            s3.delete_prefix(f"uploads/{source}")
+
     if not delete_job(job_id):
         raise HTTPException(404, "Job not found")
     return {"ok": True}

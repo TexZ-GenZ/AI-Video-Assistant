@@ -1,6 +1,10 @@
 """RAG: embeddings, ChromaDB vector store, and the grounded Q&A chain.
 
 Merged from the old core/rag_engine.py + core/vector_store.py.
+
+Collections are PER JOB (name "job_{job_id}"): retrieval from one video can
+never bleed into another — this fixes the old shared-collection bug where
+every job appended into a single "video_transcript" collection.
 """
 
 from dotenv import load_dotenv
@@ -8,6 +12,7 @@ import os
 
 load_dotenv()
 
+import chromadb
 from langchain_chroma import Chroma
 from langchain_mistralai import ChatMistralAI, MistralAIEmbeddings
 from langchain_core.prompts import ChatPromptTemplate
@@ -17,8 +22,32 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 
 CHROMA_DIR = os.getenv("CHROMA_DIR", "vector_db")
-COLLECTION_NAME = os.getenv("CHROMA_COLLECTION", "video_transcript")
 EMBEDDING_MODEL = "mistral-embed"
+
+
+def collection_name_for(job_id: str) -> str:
+    return f"job_{job_id}"
+
+
+def _client() -> chromadb.ClientAPI:
+    return chromadb.PersistentClient(path=CHROMA_DIR)
+
+
+def reset_collection(collection_name: str) -> None:
+    """Drop a collection if it exists (idempotent).
+
+    Called before indexing a job so re-processing (or a cold-pod rebuild)
+    never duplicates chunks inside the same collection.
+    """
+    try:
+        _client().delete_collection(collection_name)
+    except Exception:
+        pass  # collection doesn't exist yet
+
+
+def delete_collection(collection_name: str) -> None:
+    """Drop a job's collection (called when the job is deleted)."""
+    reset_collection(collection_name)
 
 
 def get_llm():
@@ -34,13 +63,16 @@ def get_embeddings():
     )
 
 
-def build_vector_store(transcript: str, collection_name: str = COLLECTION_NAME):
+def build_vector_store(transcript: str, collection_name: str):
     """Chunk a transcript, embed it, and store it in ChromaDB.
 
     Uses a dedicated collection per call (callers pass a per-job name) so
-    retrieval from one video can never bleed into another.
+    retrieval from one video can never bleed into another. The collection
+    is reset first so re-indexing never duplicates chunks.
     """
-    print("Building vector store")
+    print(f"Building vector store ({collection_name})")
+
+    reset_collection(collection_name)
 
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=500,
@@ -107,8 +139,8 @@ def create_rag_chain(vector_store):
     )
 
 
-def build_rag_chain(transcript: str, collection_name: str = COLLECTION_NAME):
-    """Chunk → embed → retrieve chain, all in one."""
+def build_rag_chain(transcript: str, collection_name: str):
+    """Chunk → embed → retrieve chain, all in one (per-job collection)."""
     vector_store = build_vector_store(transcript, collection_name=collection_name)
     return create_rag_chain(vector_store)
 

@@ -21,6 +21,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from shared import s3
+from shared.config import cors_origins
 from shared.dynamo import create_job, init_db
 from shared.models import ProcessRequest, ProcessResponse, UploadResponse
 from shared.queue import QUEUE_JOBS, publish
@@ -36,7 +37,7 @@ app = FastAPI(title="VideoSense Ingestion API", version="0.2.0", lifespan=lifesp
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # tighten in production (CORS_ORIGINS env)
+    allow_origins=cors_origins(),
     allow_methods=["*"],
     allow_headers=["*"],
 )
