@@ -49,6 +49,10 @@ def transcript_key(job_id: str) -> str:
     return f"jobs/{job_id}/transcript.txt"
 
 
+def chunk_prefix(job_id: str) -> str:
+    return f"jobs/{job_id}/chunks/"
+
+
 def job_prefix(job_id: str) -> str:
     return f"jobs/{job_id}/"
 
