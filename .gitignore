@@ -11,6 +11,9 @@ jobs.db
 # Tool artifacts
 .reasonix/
 
+# Machine-specific infra outputs
+infra/.videosense.env
+
 # Frontend
 UI/node_modules/
 UI/dist/
