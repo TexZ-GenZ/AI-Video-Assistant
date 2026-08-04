@@ -1,0 +1,10 @@
+# Summarization service: API (status/results/ask/jobs) + worker (LangChain LLM passes + ChromaDB)
+fastapi
+uvicorn
+langchain
+langchain-mistralai
+langchain-chroma
+langchain-text-splitters
+chromadb
+boto3
+python-dotenv

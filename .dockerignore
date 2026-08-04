@@ -1,0 +1,13 @@
+.git
+.gitignore
+.env
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+tests
+UI
+vector_db
+downloads
+jobs.db
+*.md

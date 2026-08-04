@@ -22,6 +22,9 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 
 CHROMA_DIR = os.getenv("CHROMA_DIR", "vector_db")
+CHROMA_MODE = os.getenv("CHROMA_MODE", "persistent")  # "persistent" | "http"
+CHROMA_HOST = os.getenv("CHROMA_HOST", "localhost")
+CHROMA_PORT = int(os.getenv("CHROMA_PORT", "8000"))
 EMBEDDING_MODEL = "mistral-embed"
 
 
@@ -30,6 +33,13 @@ def collection_name_for(job_id: str) -> str:
 
 
 def _client() -> chromadb.ClientAPI:
+    """Chroma client.
+
+    persistent mode → local sqlite (dev/compose, single process).
+    http mode     → shared Chroma server (EKS deployment, multi-pod).
+    """
+    if CHROMA_MODE == "http":
+        return chromadb.HttpClient(host=CHROMA_HOST, port=CHROMA_PORT)
     return chromadb.PersistentClient(path=CHROMA_DIR)
 
 
@@ -92,7 +102,7 @@ def build_vector_store(transcript: str, collection_name: str):
         documents=docs,
         collection_name=collection_name,
         embedding=embeddings,
-        persist_directory=CHROMA_DIR,
+        client=_client(),
     )
 
     return vector_store

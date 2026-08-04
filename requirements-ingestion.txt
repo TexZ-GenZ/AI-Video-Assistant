@@ -1,0 +1,8 @@
+# Ingestion service: API (upload/process) + worker (yt-dlp, pydub)
+fastapi
+uvicorn
+python-multipart
+yt-dlp
+pydub
+boto3
+python-dotenv

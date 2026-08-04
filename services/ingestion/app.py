@@ -24,12 +24,17 @@ from shared import s3
 from shared.config import cors_origins
 from shared.dynamo import create_job, init_db
 from shared.models import ProcessRequest, ProcessResponse, UploadResponse
-from shared.queue import QUEUE_JOBS, publish
+from shared.queue import QUEUE_JOBS, ensure_queues, publish
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    if os.getenv("AWS_ENDPOINT_URL"):
+        # Dev against localstack: provision the bucket + queues that the
+        # infra scripts create in production.
+        s3.ensure_bucket()
+        ensure_queues()
     yield
 
 

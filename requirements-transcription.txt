@@ -1,0 +1,7 @@
+# Transcription service: worker (faster-whisper + Sarvam AI)
+# NOTE: faster-whisper does not need torch — keep this image lean.
+faster-whisper
+sarvamai
+pydub
+boto3
+python-dotenv

@@ -1,0 +1,105 @@
+# Local full stack: 3 services (API + workers) + localstack (S3/DynamoDB/SQS).
+#
+#   docker compose up -d --build
+#
+# API keys are read from .env in the project root (MISTRAL_API_KEY,
+# SARVAM_API_KEY, WHISPER_MODEL). Chroma runs in "persistent" mode inside the
+# summarization containers — the EKS deployment uses a shared Chroma server
+# instead (CHROMA_MODE=http).
+
+services:
+  localstack:
+    image: localstack/localstack:3.8
+    environment:
+      - SERVICES=s3,dynamodb,sqs
+      - AWS_DEFAULT_REGION=us-east-1
+    ports:
+      - "4566:4566"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # ── ingestion ──────────────────────────────────────────────────────────
+  ingestion-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.ingestion
+    environment: &aws-env
+      AWS_ENDPOINT_URL: http://localstack:4566
+      AWS_REGION: us-east-1
+      JOBS_TABLE: videosense-jobs
+      JOBS_BUCKET: videosense-jobs
+      JOBS_QUEUE: videosense-jobs
+      TRANSCRIBE_QUEUE: videosense-transcribe
+      SUMMARIZE_QUEUE: videosense-summarize
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      SARVAM_API_KEY: ${SARVAM_API_KEY:-}
+    ports:
+      - "8001:8001"
+    depends_on:
+      localstack:
+        condition: service_healthy
+
+  ingestion-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.ingestion
+    command: python -m services.ingestion.worker
+    environment: *aws-env
+    depends_on:
+      localstack:
+        condition: service_healthy
+
+  # ── transcription ──────────────────────────────────────────────────────
+  transcription-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.transcription
+    environment:
+      <<: *aws-env
+      WHISPER_MODEL: ${WHISPER_MODEL:-small}
+      WHISPER_DEVICE: cpu
+      WHISPER_CACHE_DIR: /models
+    volumes:
+      - whisper-cache:/models
+    depends_on:
+      localstack:
+        condition: service_healthy
+
+  # ── summarization ──────────────────────────────────────────────────────
+  summarization-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.summarization
+    environment:
+      <<: *aws-env
+      CHROMA_DIR: /data/chroma
+      CHROMA_MODE: persistent
+    ports:
+      - "8002:8002"
+    volumes:
+      - chroma-data:/data/chroma
+    depends_on:
+      localstack:
+        condition: service_healthy
+
+  summarization-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.summarization
+    command: python -m services.summarization.worker
+    environment:
+      <<: *aws-env
+      CHROMA_DIR: /data/chroma
+      CHROMA_MODE: persistent
+    volumes:
+      - chroma-data:/data/chroma
+    depends_on:
+      localstack:
+        condition: service_healthy
+
+volumes:
+  whisper-cache:
+  chroma-data:
