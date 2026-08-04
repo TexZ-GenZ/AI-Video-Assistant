@@ -22,7 +22,7 @@ QUEUE_SUMMARIZE = os.getenv("SUMMARIZE_QUEUE", "videosense-summarize")
 DLQ_SUFFIX = "-dlq"
 
 ENDPOINT_URL = os.getenv("AWS_ENDPOINT_URL") or None
-REGION = os.getenv("AWS_REGION", "us-east-1")
+REGION = os.getenv("AWS_REGION", "ap-south-1")
 
 _url_cache: dict[str, str] = {}
 

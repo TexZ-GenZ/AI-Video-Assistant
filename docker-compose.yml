@@ -12,7 +12,8 @@ services:
     image: localstack/localstack:3.8
     environment:
       - SERVICES=s3,dynamodb,sqs
-      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_DEFAULT_REGION=ap-south-1
+      - AWS_REGION=ap-south-1
     ports:
       - "4566:4566"
     healthcheck:
@@ -28,7 +29,7 @@ services:
       dockerfile: Dockerfile.ingestion
     environment: &aws-env
       AWS_ENDPOINT_URL: http://localstack:4566
-      AWS_REGION: us-east-1
+      AWS_REGION: ap-south-1
       # dummy creds: localstack accepts anything, but botocore refuses to sign without them
       AWS_ACCESS_KEY_ID: test
       AWS_SECRET_ACCESS_KEY: test

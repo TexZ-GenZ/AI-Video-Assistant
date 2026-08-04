@@ -57,7 +57,7 @@ See [`../k8s/README.md`](../k8s/README.md) — an `aws-teardown.sh` script ships
 with the deploy docs (or `eksctl delete cluster --name videosense` for the
 cluster, plus deleting the remaining AWS resources by hand).
 
-## Cost notes (rough, us-east-1, idle — no jobs running)
+## Cost notes (rough, ap-south-1, idle — no jobs running)
 
 | Resource | ~$/mo |
 | --- | --- |

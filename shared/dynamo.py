@@ -19,7 +19,7 @@ from botocore.exceptions import ClientError, NoCredentialsError
 
 TABLE_NAME = os.getenv("JOBS_TABLE", "videosense-jobs")
 ENDPOINT_URL = os.getenv("AWS_ENDPOINT_URL") or os.getenv("DYNAMO_ENDPOINT_URL") or None
-REGION = os.getenv("AWS_REGION", "us-east-1")
+REGION = os.getenv("AWS_REGION", "ap-south-1")
 
 # All known attributes (SQLite parity: rows always expose every column)
 _ATTRS = [

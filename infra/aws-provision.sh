@@ -17,7 +17,7 @@
 set -euo pipefail
 
 CLUSTER="${1:-videosense}"
-REGION="${AWS_REGION:-us-east-1}"
+REGION="${AWS_REGION:-ap-south-1}"
 ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUT_ENV="$SCRIPT_DIR/.videosense.env"
