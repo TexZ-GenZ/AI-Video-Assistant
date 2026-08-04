@@ -57,15 +57,25 @@ See [`../k8s/README.md`](../k8s/README.md) — an `aws-teardown.sh` script ships
 with the deploy docs (or `eksctl delete cluster --name videosense` for the
 cluster, plus deleting the remaining AWS resources by hand).
 
-## Cost notes (rough, us-east-1, ~24/7)
+## Cost notes (rough, us-east-1, idle — no jobs running)
 
 | Resource | ~$/mo |
 | --- | --- |
 | EKS control plane | 73 (flat, unavoidable) |
-| Fargate pods (3–5 × 0.5 vCPU/1 GB) | 30–50 |
-| ALB + EFS + S3 + DDB + SQS + ECR | 15–25 |
-| **Total** | **~120–150/mo running 24/7** |
+| NAT gateway (private-subnet egress) | 32 |
+| Fargate idle pods: 2 APIs + summarization worker + chroma + KEDA (2) + ALB controller (2) + EFS CSI | ~100 (Fargate bills a **minimum 0.25 vCPU / 0.5 GB per pod**, so even tiny pods cost ~$9/mo each) |
+| ALB (hourly + minimal LCUs) | ~18 |
+| EFS + S3 + DDB + SQS + ECR (idle) | ~2 |
+| **Total idle 24/7** | **~$210–225/mo** |
 
-KEDA can scale workers to zero replicas between jobs (minReplicas 0), and
-stopping the stack (`kubectl scale` deployments to 0) drops the Fargate cost
-to just the control plane + storage.
+Per processed video (30 min): ~$0.05–0.15 (transient Fargate pod + Mistral).
+
+### Cutting the idle cost
+
+| Mode | ~$/mo | What you do |
+| --- | --- | --- |
+| Alive 24/7 | ~215 | as deployed |
+| Scaled to zero | ~115 | `kubectl scale deployment --all -n default --replicas=0` + delete the ingress (ALB gone); cold start ~2–5 min |
+| Destroyed | ~2–5 | `./infra/aws-teardown.sh`, recreate with `aws-provision.sh` (~15–20 min) |
+
+KEDA already scales both workers to zero between jobs (minReplicas 0).
