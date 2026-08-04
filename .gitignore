@@ -8,6 +8,9 @@ vector_db/
 # SQLite job store (generated at runtime)
 jobs.db
 
+# Tool artifacts
+.reasonix/
+
 # Frontend
 UI/node_modules/
 UI/dist/
