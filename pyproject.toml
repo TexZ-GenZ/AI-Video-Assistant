@@ -7,3 +7,9 @@ requires-python = ">=3.13"
 dependencies = [
 
 ]
+
+[tool.pytest.ini_options]
+# Repo root must be importable so tests can `from shared import ...` and
+# `from services...` — works with bare `pytest` (CI) AND `python -m pytest`.
+pythonpath = ["."]
+testpaths = ["tests"]
