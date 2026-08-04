@@ -2,10 +2,10 @@ from dotenv import load_dotenv
 import os
 
 load_dotenv()
-from utils.audio_processor import process_input
-from core.transcriber import transcribe_all
-from core.summarize import summarize, generate_title
-from core.extractor import extract_action_items, extract_key_information, extract_questions
+from services.ingestion.worker import process_input
+from services.transcription.worker import transcribe_all
+from services.summarization.summarize import summarize, generate_title
+from services.summarization.extractor import extract_action_items, extract_key_information, extract_questions
 
 source = "https://youtu.be/fQ4hkAdihNI?si=vZwHcTndzOgXef88"
 

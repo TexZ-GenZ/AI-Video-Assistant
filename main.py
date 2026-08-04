@@ -1,37 +1,7 @@
 from dotenv import load_dotenv
 load_dotenv()
-from utils.audio_processor import process_input
-from core.transcriber import transcribe_all
-from core.summarize import summarize, generate_title
-from core.extractor import extract_action_items, extract_key_information, extract_questions
-from core.rag_engine import build_rag_chain , ask_question
-
-def run_pipeline(source:str , language:str = "english") -> dict:
-    print("Running Ai video assistant ...")
-
-    chunks = process_input(source)
-    backend = "whisper"
-    if language == "hindi" :
-        backend = "sarvam"
-    transcript = transcribe_all(chunks, backend=backend)
-
-    print(f"\n\nRaw Transcript:\n{transcript[:300]}...")
-
-    title = generate_title(transcript)
-    summary = summarize(transcript)
-    actionables = extract_action_items(transcript)
-    questions = extract_questions(transcript)
-    information = extract_key_information(transcript)
-    rag_chain = build_rag_chain(transcript)
-
-    return {
-        "title" : title,
-        "summary" : summary,
-        "actionables" : actionables,
-        "questions" : questions,
-        "information" : information,
-        "rag_chain" : rag_chain
-    }
+from shared.pipeline import run_pipeline
+from services.summarization.rag import ask_question
 
 if __name__ == "__main__" :
     source = input("Enter Youtube URL or local file path:").strip()
