@@ -4,5 +4,6 @@ uvicorn
 python-multipart
 yt-dlp
 pydub
+audioop-lts  # pydub on Python 3.13 (audioop removed from stdlib)
 boto3
 python-dotenv

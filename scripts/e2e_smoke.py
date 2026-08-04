@@ -20,6 +20,17 @@ import time
 import urllib.request
 
 
+# Windows consoles often can't encode emoji — keep output ASCII.
+def _fix_stdout():
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+
+_fix_stdout()
+
+
 def http(method: str, url: str, body=None):
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(
@@ -52,44 +63,49 @@ def main():
     parser.add_argument("--ask", action="append", default=[], help="question to ask (repeatable)")
     parser.add_argument("--timeout", type=int, default=30)
     parser.add_argument("--file", help="upload this file, then process it")
+    parser.add_argument("--job", help="skip processing; inspect an existing job id")
     args = parser.parse_args()
 
-    source = args.source
-    if args.file:
-        import mimetypes
-        import urllib.request as u
+    if args.job:
+        job_id = args.job
+        print(f"Inspecting existing job: {job_id}")
+    else:
+        source = args.source
+        if args.file:
+            import mimetypes
+            import urllib.request as u
 
-        boundary = "----videosense-e2e"
-        with open(args.file, "rb") as f:
-            content = f.read()
-        body = (
-            f"--{boundary}\r\n"
-            f'Content-Disposition: form-data; name="file"; filename="{args.file.split("/")[-1]}"\r\n'
-            f"Content-Type: {mimetypes.guess_type(args.file)[0] or 'application/octet-stream'}\r\n\r\n"
-        ).encode() + content + f"\r\n--{boundary}--\r\n".encode()
-        req = u.Request(
-            f"{args.api_url}/api/upload", data=body, method="POST",
-            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
-        )
-        with u.urlopen(req, timeout=120) as resp:
-            source = json.loads(resp.read().decode())["file_id"]
-        print(f"Uploaded {args.file} → file_id {source}")
+            boundary = "----videosense-e2e"
+            with open(args.file, "rb") as f:
+                content = f.read()
+            body = (
+                f"--{boundary}\r\n"
+                f'Content-Disposition: form-data; name="file"; filename="{args.file.split("/")[-1]}"\r\n'
+                f"Content-Type: {mimetypes.guess_type(args.file)[0] or 'application/octet-stream'}\r\n\r\n"
+            ).encode() + content + f"\r\n--{boundary}--\r\n".encode()
+            req = u.Request(
+                f"{args.api_url}/api/upload", data=body, method="POST",
+                headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+            )
+            with u.urlopen(req, timeout=120) as resp:
+                source = json.loads(resp.read().decode())["file_id"]
+            print(f"Uploaded {args.file} → file_id {source}")
 
-    if not source:
-        parser.error("provide --source or --file")
+        if not source:
+            parser.error("provide --source, --file or --job")
 
-    print(f"Processing: {source}")
-    job = http("POST", f"{args.api_url}/api/process",
-               {"source": source, "language": "english"})
-    job_id = job["job_id"]
-    print(f"Job: {job_id}")
+        print(f"Processing: {source}")
+        job = http("POST", f"{args.api_url}/api/process",
+                   {"source": source, "language": "english"})
+        job_id = job["job_id"]
+        print(f"Job: {job_id}")
 
-    final = poll_until_done(args.sum_url, job_id, args.timeout)
-    if final["status"] == "error":
-        print(f"❌ Job failed: {final.get('error')}")
-        sys.exit(1)
+        final = poll_until_done(args.sum_url, job_id, args.timeout)
+        if final["status"] == "error":
+            print(f"[FAIL] Job failed: {final.get('error')}")
+            sys.exit(1)
 
-    print("✅ Job done")
+        print("[OK] Job done")
     results = http("GET", f"{args.sum_url}/api/process/{job_id}/results")
     print(f"\nTitle: {results['title']}")
     print(f"\nSummary:\n{results['summary'][:2000]}")

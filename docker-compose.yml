@@ -29,6 +29,9 @@ services:
     environment: &aws-env
       AWS_ENDPOINT_URL: http://localstack:4566
       AWS_REGION: us-east-1
+      # dummy creds: localstack accepts anything, but botocore refuses to sign without them
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
       JOBS_TABLE: videosense-jobs
       JOBS_BUCKET: videosense-jobs
       JOBS_QUEUE: videosense-jobs
@@ -59,7 +62,8 @@ services:
       dockerfile: Dockerfile.transcription
     environment:
       <<: *aws-env
-      WHISPER_MODEL: ${WHISPER_MODEL:-small}
+      # dev stack runs on CPU → small model (fast, no GPU). Override freely.
+      WHISPER_MODEL: small
       WHISPER_DEVICE: cpu
       WHISPER_CACHE_DIR: /models
     volumes:
