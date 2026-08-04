@@ -6,164 +6,132 @@ Drop a YouTube link or upload a video file. Get a transcript, summary, action it
 
 ## Architecture
 
+Three FastAPI microservices orchestrated by an SQS pipeline, with all state in AWS:
+
 ```mermaid
-flowchart TB
-    Source["YouTube URL or Local File"] -->|"yt-dlp / pydub"| Audio["WAV chunks (10 min, 16kHz mono)"]
-    Audio -->|"faster-whisper (English)<br>Sarvam AI (Hindi → English)"| Transcript["Raw Transcript"]
+flowchart LR
+    Browser["React UI (Vercel)"] -->|"upload / process"| IngAPI["Ingestion API"]
+    Browser -->|"status / results / ask / history"| SumAPI["Summarization API"]
 
-    Transcript -->|"RecursiveCharacterTextSplitter<br>(500 chars, 50 overlap)"| Chunks["Text Chunks"]
-    Chunks -->|"MistralAIEmbeddings<br>(mistral-embed)"| Chroma["ChromaDB Vector Store"]
+    IngAPI -->|"create job + publish"| Q1["SQS: jobs"]
+    Q1 -->|"consume"| IngWorker["Ingestion worker"]
+    IngWorker -->|"yt-dlp / pydub → 10-min WAV chunks"| S3
+    IngWorker -->|"publish"| Q2["SQS: transcribe"]
 
-    Transcript -->|"Map-Reduce"| Summary["Summary<br>(mistral-small-2603)"]
-    Transcript -->|"LCEL Chain"| Actions["Action Items"]
-    Transcript -->|"LCEL Chain"| KeyInfo["Key Information"]
-    Transcript -->|"LCEL Chain"| Questions["Questions Raised"]
+    Q2 -->|"consume"| TWorker["Transcription worker"]
+    TWorker -->|"faster-whisper / Sarvam"| S3["S3: chunks + transcript"]
+    TWorker -->|"publish"| Q3["SQS: summarize"]
 
-    Chroma -->|"MMR Retrieval (k=4, fetch_k=10)"| RAG["RAG Chain (mistral-small-2603)"]
-    UserQ["User Question"] --> RAG
-    RAG -->|"Answer grounded in transcript"| Answer["Response"]
+    Q3 -->|"consume"| SWorker["Summarization worker"]
+    SWorker -->|"Mistral passes + ChromaDB (per-job collection)"| DDB[("DynamoDB: jobs")]
+    SWorker -->|"results"| DDB
+    SWorker -->|"index"| Chroma["ChromaDB (EKS)"]
+
+    SumAPI -->|"RAG (MMR, k=4)"| Chroma
+    SumAPI -->|"job state"| DDB
+    S3 -->|"transcript (cold-pod rebuild)"| SumAPI
 ```
 
-### Pipeline flow
+### The job lifecycle
 
-1. **Acquire** — downloads YouTube audio via `yt-dlp`, or converts uploaded/local files to 16kHz mono WAV, splits into 10-minute chunks
-2. **Transcribe** — English via **faster-whisper** (local, CUDA, batched inference), Hindi via **Sarvam AI** (cloud, with translation)
-3. **Analyze** — LLM passes (Mistral) extract the title, summary (map-reduce), action items, key information, and questions
-4. **Index** — chunks the transcript, embeds with Mistral, stores in ChromaDB with MMR retrieval. The RAG chain answers questions grounded in the video
+1. **Ingestion** — `POST /api/upload` streams the file to S3 (`uploads/{file_id}`); `POST /api/process` creates the job in DynamoDB and publishes to the **jobs** queue. The ingestion worker downloads (YouTube) or fetches (staged upload), converts to 16 kHz mono WAV, splits into 10-minute chunks, uploads them to `jobs/{job_id}/chunks/`, and publishes to the **transcribe** queue.
+2. **Transcription** — the worker downloads the chunks (in order!), transcribes English with **faster-whisper** (CPU/GPU configurable) or Hindi with **Sarvam AI** (translated to English), stores the transcript at `jobs/{job_id}/transcript.txt`, and publishes to the **summarize** queue.
+3. **Summarization** — the worker runs the LLM passes (title, map-reduce summary, action items, key information, questions), indexes the transcript into a **per-job ChromaDB collection** (MMR retrieval, k=4), and writes results to DynamoDB.
+4. **Chat** — `POST /api/process/{id}/ask` answers questions grounded in the video. Chains live in pod memory; a cold pod rebuilds from the stored transcript.
+
+Every queue has a **DLQ** (`maxReceiveCount=3`): crashed workers redrive; business failures are recorded on the job instead.
 
 ---
 
-## Setup
+## Setup (local development)
 
 ### Prerequisites
 
-- **Python 3.13+**
-- **Node.js 18+** (for the frontend)
-- **ffmpeg** (for audio processing — `brew install ffmpeg` / `apt install ffmpeg`)
-- **CUDA-capable GPU** (optional — faster-whisper falls back to CPU)
+- **Python 3.13+**, **Node.js 18+**, **ffmpeg**
+- AWS access for the state layer: real AWS credentials (`aws configure`), or the localstack compose stack (see `docker-compose.yml`)
 
-### 1. Clone & install backend
+### 1. Install backend
 
 ```bash
-git clone <repo-url>
-cd "AI video assistant"
-
-# Create virtual environment
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
+.venv\Scripts\activate          # Windows (or source .venv/bin/activate)
+uv pip install --python .venv/Scripts/python.exe -r requirements.txt
 ```
 
-### 2. Configure environment
-
-Create a `.env` file in the project root:
+### 2. Configure environment (`.env`)
 
 ```env
 MISTRAL_API_KEY=your-mistral-api-key
-WHISPER_MODEL=turbo
-SARVAM_API_KEY=your-sarvam-api-key      # only needed for Hindi
+WHISPER_MODEL=small             # "small" for CPU, "turbo" for GPU
+WHISPER_DEVICE=cpu              # "cpu" (cloud) | "cuda" (local GPU)
+SARVAM_API_KEY=your-sarvam-api-key   # only needed for Hindi
 SARVAM_STT_MODEL=saaras:v3
 ```
 
-> Get a Mistral API key from [console.mistral.ai](https://console.mistral.ai). Sarvam is only required if you plan to transcribe Hindi audio.
+AWS wiring (defaults shown; the compose stack sets `AWS_ENDPOINT_URL` automatically):
 
-### 3. Install frontend
+```env
+JOBS_TABLE=videosense-jobs
+JOBS_BUCKET=videosense-jobs
+JOBS_QUEUE=videosense-jobs
+TRANSCRIBE_QUEUE=videosense-transcribe
+SUMMARIZE_QUEUE=videosense-summarize
+CORS_ORIGINS=*                  # comma-separated; set to your frontend origin in prod
+```
+
+### 3. Run
+
+Each service has an API and/or a worker process:
+
+```bash
+uvicorn services.ingestion.app:app --reload          --port 8001   # API
+python -m services.ingestion.worker                               # worker
+python -m services.transcription.worker                           # worker
+uvicorn services.summarization.app:app --reload      --port 8002   # API
+python -m services.summarization.worker                           # worker
+```
+
+> The services are AWS-native: without credentials or localstack the ingestion
+> API fails fast at startup (by design). The recommended local setup is the
+> docker-compose stack, which runs all services + workers + ChromaDB +
+> localstack with one command.
+
+### 4. Frontend
 
 ```bash
 cd UI
 npm install
+npm run dev        # http://localhost:5173, calls VITE_API_URL (default localhost:8000)
 ```
-
----
-
-## Running
-
-### Start the backend
-
-```bash
-uvicorn server:app --reload
-```
-
-Runs on `http://localhost:8000`. Swagger docs at `http://localhost:8000/docs`.
-
-### Start the frontend
-
-```bash
-cd UI
-npm run dev
-```
-
-Runs on `http://localhost:5173`. Calls the backend at `http://localhost:8000`.
-
-> **CORS tip:** Add a Vite proxy to sidestep CORS during development:
-> ```ts
-> // UI/vite.config.ts
-> export default defineConfig({
->   server: { proxy: { "/api": "http://localhost:8000" } },
->   // ...
-> });
-> ```
-> Then set `VITE_API_URL=""` in your environment or `.env` file.
 
 ---
 
 ## API Reference
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/upload` | Upload a video/audio file (multipart). Returns `{ file_id }`. |
-| `POST` | `/api/process` | Start pipeline. Body: `{ source, language }`. Returns `{ job_id, status }`. |
-| `GET` | `/api/process/{id}/status` | Poll progress. Returns `{ job_id, status, progress? }`. |
-| `GET` | `/api/process/{id}/results` | Get results. Returns `{ title, summary, actionables, questions, information }`. |
-| `POST` | `/api/process/{id}/ask` | Chat with the video. Body: `{ question }`. Returns `{ answer }`. |
-| `GET` | `/api/jobs` | List all jobs (history). Returns `{ jobs: [...] }`. |
-| `DELETE` | `/api/jobs/{id}` | Delete a job and its data. |
+| Method | Endpoint | Service | Description |
+|--------|----------|---------|-------------|
+| `POST` | `/api/upload` | ingestion | Upload a video/audio file (multipart, max 500 MB). Returns `{ file_id }`. |
+| `POST` | `/api/process` | ingestion | Start pipeline. Body: `{ source, language }`. Returns `{ job_id, status }`. |
+| `GET` | `/api/process/{id}/status` | summarization | Poll progress. |
+| `GET` | `/api/process/{id}/results` | summarization | Get results. |
+| `POST` | `/api/process/{id}/ask` | summarization | Chat with the video. Body: `{ question }`. |
+| `GET` | `/api/jobs` | summarization | List all jobs (history). |
+| `DELETE` | `/api/jobs/{id}` | summarization | Delete a job and all its data (S3 + Chroma + DynamoDB). |
+| `GET` | `/health` | both | Liveness. |
 
-### Status values
+Status values: `processing` → `done` | `error`.
 
-- `processing` — pipeline is running, poll every 3s
-- `done` — results ready, RAG chain active
-- `error` — something failed, check the `error` field
-
----
-
-## CLI Usage
-
-The original CLI entry point still works:
-
-```bash
-python main.py
-```
-
-Prompts for a YouTube URL or local file path, runs the full pipeline, and starts an interactive chat session in the terminal.
+In production both APIs sit behind one load balancer with path-based routing (`/api/upload`, `/api/process` → ingestion; everything else → summarization), so the frontend keeps a single `VITE_API_URL`.
 
 ---
 
 ## Testing
 
 ```bash
-python test.py
+.venv\Scripts\python -m pytest          # unit + integration tests (moto-emulated AWS)
 ```
 
-Runs the pipeline against a hardcoded YouTube video and prints the results.
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| **Backend framework** | FastAPI |
-| **Job store** | SQLite |
-| **Speech-to-text** | faster-whisper (English), Sarvam AI (Hindi) |
-| **LLM** | Mistral (`mistral-small-2603`) via LangChain |
-| **Embeddings** | Mistral (`mistral-embed`) |
-| **Vector DB** | ChromaDB |
-| **Audio** | yt-dlp, pydub, ffmpeg |
-| **Frontend** | React 18, TypeScript, Vite, Tailwind CSS 4, shadcn/ui, motion |
-| **RAG framework** | LangChain (LCEL chains) |
+Coverage: job store CRUD, S3 layout/cleanup, SQS pipeline semantics (DLQ/ack), ingestion worker (real audio through ffmpeg), transcription worker (chunk ordering, backend routing, error paths), summarization worker + API (cold-pod rebuild, delete cleanup).
 
 ---
 
@@ -171,34 +139,36 @@ Runs the pipeline against a hardcoded YouTube video and prints the results.
 
 ```
 .
-├── server.py              # FastAPI app + all endpoints
-├── db.py                  # SQLite job store
-├── main.py                # CLI entry point
-├── test.py                # Hardcoded integration test
-├── requirements.txt
-├── .env                   # API keys (gitignored)
-│
-├── core/                  # Pipeline modules (unchanged)
-│   ├── transcriber.py     # Whisper + Sarvam STT
-│   ├── summarize.py       # Map-reduce summary + title
-│   ├── extractor.py       # Action items, key info, questions
-│   ├── rag_engine.py      # ChromaDB + RAG chain
-│   └── vector_store.py    # Embeddings + retrieval
-│
-├── utils/
-│   └── audio_processor.py # YouTube download, WAV conversion, chunking
-│
-├── UI/                    # React frontend
-│   ├── src/app/
-│   │   ├── App.tsx
-│   │   ├── lib/videoApi.ts
-│   │   └── components/
-│   │       ├── input-section.tsx
-│   │       ├── processing-state.tsx
-│   │       ├── results-section.tsx
-│   │       ├── chat-panel.tsx
-│   │       └── history-sidebar.tsx
-│   └── package.json
-│
-└── vector_db/             # ChromaDB persistence (gitignored)
+├── services/
+│   ├── ingestion/        # upload + process API, SQS worker (audio acquisition)
+│   ├── transcription/    # SQS worker (whisper / Sarvam STT)
+│   └── summarization/    # status/results/ask/jobs API, SQS worker (LLM + RAG)
+├── shared/
+│   ├── dynamo.py         # job store (DynamoDB)
+│   ├── s3.py             # per-job object layout + transfer helpers
+│   ├── queue.py          # SQS pipeline (3 queues + DLQs)
+│   ├── models.py         # pydantic API models
+│   └── config.py         # env-driven config (CORS)
+├── tests/                # pytest + moto suite
+├── UI/                   # React frontend (Vite)
+├── Dockerfile.*          # per-service images
+├── docker-compose.yml    # local full stack (services + Chroma + localstack)
+└── requirements.txt
 ```
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| **Services** | FastAPI microservices (ingestion / transcription / summarization) |
+| **Async jobs** | Amazon SQS (3 queues + DLQs) |
+| **Job state** | Amazon DynamoDB |
+| **Storage** | Amazon S3 (uploads, chunks, transcripts) |
+| **Speech-to-text** | faster-whisper (English), Sarvam AI (Hindi → English) |
+| **LLM** | Mistral (`mistral-small-2603`) via LangChain |
+| **Embeddings** | Mistral (`mistral-embed`) |
+| **Vector DB** | self-hosted ChromaDB (per-job collections, MMR k=4) |
+| **Frontend** | React 18, TypeScript, Vite, Tailwind CSS 4, shadcn/ui |
+| **RAG framework** | LangChain (LCEL chains) |
