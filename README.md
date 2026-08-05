@@ -64,29 +64,29 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-    A["1 · Paste a link / upload a file"] --> B["2 · Job created in DynamoDB<br/>→ jobs queue"]
-    B --> C["3 · Audio → 10-min WAV chunks → S3"]
-    C --> D["4 · → transcribe queue"]
-    D --> E["5 · Transcript (whisper / Sarvam) → S3"]
-    E --> F["6 · → summarize queue"]
-    F --> G["7 · Mistral passes: summary, actions, facts, questions"]
-    G --> H["8 · Embed + index into per-video Chroma collection"]
-    H --> I["9 · Results to DynamoDB — status: done"]
-    I --> J["10 · Chat: grounded answer from retrieval"]
+    A["1 · Paste link / upload"] --> B["2 · DynamoDB + jobs queue"]
+    B --> C["3 · WAV chunks → S3"]
+    C --> D["4 · transcribe queue"]
+    D --> E["5 · transcript → S3"]
+    E --> F["6 · summarize queue"]
+    F --> G["7 · Mistral analysis"]
+    G --> H["8 · Chroma index"]
+    H --> I["9 · done in DynamoDB"]
+    I --> J["10 · grounded chat"]
 ```
 
-Step by step:
-
-1. **Paste a YouTube URL or upload a file.** The ingestion API streams uploads to S3 (`uploads/{file_id}`).
-2. **The job is created in DynamoDB** (`status: processing`) and a message is published to the **jobs queue**.
-3. **The ingestion worker** downloads the video (yt-dlp) or fetches the staged upload, converts it to 16 kHz mono WAV, and splits it into 10-minute chunks → `jobs/{job_id}/chunks/` in S3.
-4. It publishes to the **transcribe queue** and the job progress updates to *"Queued for transcription"*.
-5. **The transcription worker** downloads the chunks in order and transcribes them — faster-whisper for English, Sarvam AI (translated to English) for Hindi. The joined transcript is stored at `jobs/{job_id}/transcript.txt`.
-6. It publishes to the **summarize queue**.
-7. **The summarization worker** runs the LangChain LLM passes: title, map-reduce summary, action items, key information, and questions raised.
-8. The transcript is chunked, embedded with **Mistral**, and indexed into a **per-video ChromaDB collection** (MMR retrieval, k=4). Re-indexing never duplicates chunks — the collection is reset first.
-9. Results are written to DynamoDB and the job flips to `done`.
-10. **Chat.** `POST /api/process/{id}/ask` retrieves the most relevant chunks and the LLM answers **grounded in the video only** — if the answer isn't in the context, it says so.
+| # | Stage | What happens |
+|---|-------|--------------|
+| 1 | **Input** | Paste a YouTube URL or upload a file (streamed to S3). |
+| 2 | **Job created** | Row written to DynamoDB, message published to the jobs queue. |
+| 3 | **Ingestion** | Worker downloads/converts audio, splits into 10-min WAV chunks → S3. |
+| 4 | **Handoff** | Publish to the transcribe queue. |
+| 5 | **Transcription** | Whisper (EN) or Sarvam (HI→EN) → transcript saved to S3. |
+| 6 | **Handoff** | Publish to the summarize queue. |
+| 7 | **Analysis** | Mistral passes: title, summary, action items, key info, questions. |
+| 8 | **Index** | Transcript embedded + indexed into a per-video Chroma collection (MMR k=4). |
+| 9 | **Done** | Results written to DynamoDB, status flips to `done`. |
+| 10 | **Chat** | Ask retrieves from Chroma; answers are grounded in the video only. |
 
 Each queue has a **DLQ** (`maxReceiveCount=3`): crashed workers redrive; business failures are recorded on the job instead.
 
