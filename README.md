@@ -190,9 +190,9 @@ See `infra/README.md` and `k8s/README.md` for the full details.
 
 | | |
 | --- | --- |
-| **Home — paste a link or upload a file** | **Job processing — live progress** |
+| **Home — paste a link or upload a file** | **Results + chat** |
 | ![Results](UI/screenshots/results.png) | ![Processing](UI/screenshots/processing.png) |
-| **Results + chat** | |
+| **Action Items + summary** | |
 | ![Home](UI/screenshots/home.png) | |
 
 ---
