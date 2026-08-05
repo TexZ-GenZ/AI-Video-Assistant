@@ -30,12 +30,14 @@ spec:
             - name: whisper-cache
               mountPath: /models
           resources:
+            # Fargate sizes the sandbox from REQUESTS (2Gi → 3GB) and whisper's
+            # model-load spike OOMs that — keep the request at 4Gi.
             requests:
               cpu: "1"
-              memory: 2Gi
+              memory: 4Gi
             limits:
               cpu: "2"
-              memory: 4Gi
+              memory: 6Gi
       volumes:
         - name: whisper-cache
           persistentVolumeClaim:

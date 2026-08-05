@@ -272,11 +272,11 @@ def process_job_message(msg: dict) -> None:
         shutil.rmtree(workdir, ignore_errors=True)
 
 
-def run_worker(poll_seconds: int = 20, visibility: int = 3600) -> None:
+def run_worker(poll_seconds: int = 20, visibility: int = 1200) -> None:
     """Long-poll the transcribe queue forever.
 
-    Visibility is 1h: a CPU transcription of a long video can take tens of
-    minutes, and an in-flight message must not be redelivered mid-work.
+    Visibility is 20 min: long enough for a CPU transcription of a long
+    video, short enough that a crashed pod's message redelivers quickly.
     """
     print(f"Transcription worker polling {queue.QUEUE_TRANSCRIBE} ...")
     while True:
