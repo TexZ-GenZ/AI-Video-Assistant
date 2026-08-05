@@ -263,7 +263,7 @@ fi
 echo "==> Installing KEDA (core, v2.16.1) ..."
 # Server-side apply: client-side apply stores the whole object in an
 # annotation, and KEDA's scaledjobs CRD exceeds the 256 KiB annotation limit.
-kubectl apply --server-side \
+kubectl apply --server-side --force-conflicts \
   -f https://github.com/kedacore/keda/releases/download/v2.16.1/keda-2.16.1-core.yaml
 
 if eksctl get iamserviceaccount --cluster "$CLUSTER" --region "$REGION" \
