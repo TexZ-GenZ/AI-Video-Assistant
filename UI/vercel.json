@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "http://k8s-default-videosen-73831558cb-1798512733.ap-south-1.elb.amazonaws.com/api/:path*"
+    }
+  ]
+}

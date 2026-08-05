@@ -1,9 +1,12 @@
 // API client for the AI Video Assistant backend (FastAPI).
 //
 // All calls go to BASE_URL. Set VITE_API_URL to override the default.
-// Use the Vite dev proxy in dev mode — no CORS issues.
-
-export const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+// Prod default is "" → relative /api/... paths, proxied by Vercel's
+// vercel.json rewrite to the backend (avoids mixed-content + CORS).
+// Dev default is localhost:8000 (the local backend).
+export const BASE_URL =
+  import.meta.env.VITE_API_URL ??
+  (import.meta.env.PROD ? "" : "http://localhost:8000");
 
 export type Language = "english" | "hindi";
 
