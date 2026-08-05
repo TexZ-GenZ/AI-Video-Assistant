@@ -302,6 +302,39 @@ else
     --attach-policy-arn "arn:aws:iam::aws:policy/AmazonSQSReadOnlyAccess" \
     --attach-policy-arn "arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess" \
     --approve --override-existing-serviceaccounts
+  # The operator pod must restart to pick up the IRSA env vars (AWS_ROLE_ARN
+  # + token file) — without them the SQS scaler fails and ScaledObjects stay
+  # READY: False.
+  kubectl rollout restart deployment keda-operator -n keda
+  kubectl rollout status deployment keda-operator -n keda --timeout=300s
+fi
+
+# ── 10. App IRSA (DynamoDB + S3 + SQS for the service pods) ────────────────
+APP_POLICY_NAME="VideoSenseAppPolicy"
+APP_POLICY_ARN="arn:aws:iam::$ACCOUNT:policy/$APP_POLICY_NAME"
+if aws iam get-policy --policy-arn "$APP_POLICY_ARN" >/dev/null 2>&1; then
+  echo "==> IAM policy $APP_POLICY_NAME exists"
+else
+  echo "==> Creating IAM policy $APP_POLICY_NAME ..."
+  if command -v cygpath >/dev/null 2>&1; then
+    APP_POLICY_FILE="file://$(cygpath -m "$SCRIPT_DIR/app-iam-policy.json")"
+  else
+    APP_POLICY_FILE="file://$SCRIPT_DIR/app-iam-policy.json"
+  fi
+  aws iam create-policy --policy-name "$APP_POLICY_NAME" \
+    --policy-document "$APP_POLICY_FILE" \
+    --description "VideoSense app pods: DynamoDB + S3 + SQS" >/dev/null
+fi
+
+if eksctl get iamserviceaccount --cluster "$CLUSTER" --region "$REGION" \
+    --name videosense-app --namespace default 2>/dev/null | grep -q videosense-app; then
+  echo "==> IRSA videosense-app exists"
+else
+  echo "==> Creating IRSA videosense-app ..."
+  eksctl create iamserviceaccount \
+    --cluster "$CLUSTER" --region "$REGION" \
+    --name videosense-app --namespace default \
+    --attach-policy-arn "$APP_POLICY_ARN" --approve
 fi
 
 # ── Outputs ────────────────────────────────────────────────────────────────

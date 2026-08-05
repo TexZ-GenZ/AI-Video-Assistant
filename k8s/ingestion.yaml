@@ -16,6 +16,7 @@ spec:
     spec:
       imagePullSecrets:
         - name: ecr-cred
+      serviceAccountName: videosense-app
       containers:
         - name: api
           image: YOUR_ECR_ACCOUNT/videosense/ingestion:latest
@@ -75,6 +76,7 @@ spec:
     spec:
       imagePullSecrets:
         - name: ecr-cred
+      serviceAccountName: videosense-app
       containers:
         - name: worker
           image: YOUR_ECR_ACCOUNT/videosense/ingestion:latest
