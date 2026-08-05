@@ -146,14 +146,18 @@ if ! kubectl get deployment cert-manager -n cert-manager >/dev/null 2>&1; then
   echo "==> Installing cert-manager (v1.16.3) ..."
   kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.3/cert-manager.yaml
 fi
-# --vpc-id is REQUIRED on Fargate: there is no EC2 instance metadata, so the
-# controller's VPC discovery fails without it.
+# --aws-vpc-id is REQUIRED on Fargate: there is no EC2 instance metadata, so the
+# controller's VPC discovery fails without it. It's applied as a patch AFTER
+# the manifest (deterministic; the flag lives in the AWS config group).
 ALB_VPC_ID="$(aws eks describe-cluster --name "$CLUSTER" --region "$REGION" \
   --query 'cluster.resourcesVpcConfig.vpcId' --output text)"
 curl -fsSL https://github.com/kubernetes-sigs/aws-load-balancer-controller/releases/download/v2.11.0/v2_11_0_full.yaml \
-  | sed -e "s/your-cluster-name/$CLUSTER/g" \
-        -e "s|--cluster-name=$CLUSTER|--cluster-name=$CLUSTER\\n            - --vpc-id=$ALB_VPC_ID|" \
+  | sed "s/your-cluster-name/$CLUSTER/g" \
   | kubectl apply -f -
+kubectl patch deployment aws-load-balancer-controller -n kube-system --type=json \
+  -p "[{\"op\":\"replace\",\"path\":\"/spec/template/spec/containers/0/args\",\"value\":[\"--cluster-name=$CLUSTER\",\"--ingress-class=alb\",\"--aws-vpc-id=$ALB_VPC_ID\"]}]"
+# The IngressClass ("alb") ships as a separate release asset.
+kubectl apply -f https://github.com/kubernetes-sigs/aws-load-balancer-controller/releases/download/v2.11.0/v2_11_0_ingclass.yaml
 
 # ── 7. EFS (whisper cache + chroma data) ───────────────────────────────────
 VPC_ID="$(aws eks describe-cluster --name "$CLUSTER" --region "$REGION" \
@@ -258,6 +262,11 @@ else
   eksctl create addon --name aws-efs-csi-driver --cluster "$CLUSTER" --region "$REGION" \
     --service-account-role-arn "$EFS_ROLE_ARN" --force
 fi
+# Fargate rejects privileged containers — the controller's efs-plugin runs
+# privileged by default but only needs the EFS API (mounting happens in the
+# node component, which doesn't run on Fargate).
+kubectl patch deployment efs-csi-controller -n kube-system --type=json \
+  -p '[{"op":"remove","path":"/spec/template/spec/containers/0/securityContext"}]' || true
 
 # ── 9. KEDA (SQS autoscaling) ──────────────────────────────────────────────
 echo "==> Installing KEDA (core, v2.16.1) ..."

@@ -1,29 +1,24 @@
-# EFS-backed storage (Fargate has no EBS; the EFS CSI driver is provisioned in
-# infra/aws-provision.sh). Two StorageClasses because the EFS CSI driver binds
-# ONE access point per StorageClass: one for the whisper model cache, one for
-# chroma data. Access point ids come from infra/.videosense.env (placeholders
-# substituted by apply.sh).
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
+# STATIC EFS provisioning (Fargate-compatible).
+#
+# Dynamic provisioning (provisioningMode: efs-ap) requires node topology
+# labels, which don't exist on Fargate (the node daemonset can't run) — the
+# provisioner fails with "no available topology found". Static PVs bind
+# directly to the EFS access points created by infra/aws-provision.sh.
+# Placeholders are substituted by apply.sh from infra/.videosense.env.
+apiVersion: v1
+kind: PersistentVolume
 metadata:
-  name: efs-sc
-provisioner: efs.csi.aws.com
-parameters:
-  provisioningMode: efs-ap
-  fileSystemId: YOUR_EFS_FS_ID
-  accessPointId: YOUR_EFS_AP_MODELS
-  directoryPerms: "700"
----
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: efs-sc-chroma
-provisioner: efs.csi.aws.com
-parameters:
-  provisioningMode: efs-ap
-  fileSystemId: YOUR_EFS_FS_ID
-  accessPointId: YOUR_EFS_AP_CHROMA
-  directoryPerms: "700"
+  name: whisper-cache-pv
+spec:
+  capacity:
+    storage: 10Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  csi:
+    driver: efs.csi.aws.com
+    volumeHandle: "YOUR_EFS_FS_ID::YOUR_EFS_AP_MODELS"
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -33,10 +28,26 @@ metadata:
 spec:
   accessModes:
     - ReadWriteMany
-  storageClassName: efs-sc
+  storageClassName: ""   # static binding — no dynamic provisioning
+  volumeName: whisper-cache-pv
   resources:
     requests:
       storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: chroma-data-pv
+spec:
+  capacity:
+    storage: 10Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  csi:
+    driver: efs.csi.aws.com
+    volumeHandle: "YOUR_EFS_FS_ID::YOUR_EFS_AP_CHROMA"
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -46,7 +57,8 @@ metadata:
 spec:
   accessModes:
     - ReadWriteMany
-  storageClassName: efs-sc-chroma
+  storageClassName: ""   # static binding — no dynamic provisioning
+  volumeName: chroma-data-pv
   resources:
     requests:
       storage: 10Gi

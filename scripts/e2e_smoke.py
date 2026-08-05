@@ -69,6 +69,11 @@ def main():
     if args.job:
         job_id = args.job
         print(f"Inspecting existing job: {job_id}")
+        final = poll_until_done(args.sum_url, job_id, args.timeout)
+        if final["status"] == "error":
+            print(f"[FAIL] Job failed: {final.get('error')}")
+            sys.exit(1)
+        print("[OK] Job done")
     else:
         source = args.source
         if args.file:

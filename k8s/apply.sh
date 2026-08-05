@@ -34,12 +34,13 @@ fi
 
 # ── 1. ECR pull credentials ────────────────────────────────────────────────
 echo "==> Refreshing ECR pull secret (ecr-cred) ..."
-aws ecr get-login-password --region "$REGION" | \
-  kubectl create secret docker-registry ecr-cred \
-    --docker-server="$ECR_ACCOUNT" \
-    --docker-username=AWS \
-    --docker-password-stdin \
-    --dry-run=client -o yaml | kubectl apply -f -
+ECR_PASS="$(aws ecr get-login-password --region "$REGION")"
+kubectl create secret docker-registry ecr-cred \
+  --docker-server="$ECR_ACCOUNT" \
+  --docker-username=AWS \
+  --docker-password="$ECR_PASS" \
+  --dry-run=client -o yaml | kubectl apply -f -
+unset ECR_PASS
 
 # ── 2. App secrets from ../.env ────────────────────────────────────────────
 mistral_key="$(grep -E '^MISTRAL_API_KEY' "$ROOT_ENV" | head -1 \

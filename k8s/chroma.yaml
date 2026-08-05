@@ -18,25 +18,23 @@ spec:
       containers:
         - name: chroma
           image: chromadb/chroma:1.5.9
-          args: ["--workers", "1", "--host", "0.0.0.0", "--port", "8000"]
+          # chroma 1.x CLI: `chroma run --path <dir>` (the old --workers/
+          # --host/--port style was removed in 1.0)
+          args: ["run", "--host", "0.0.0.0", "--port", "8000", "--path", "/data/chroma"]
           env:
-            - name: IS_PERSISTENT
-              value: "TRUE"
-            - name: PERSIST_DIRECTORY
-              value: /data/chroma
             - name: ANONYMIZED_TELEMETRY
               value: "FALSE"
           ports:
             - containerPort: 8000
           readinessProbe:
             httpGet:
-              path: /api/v1/heartbeat
+              path: /api/v2/heartbeat
               port: 8000
             initialDelaySeconds: 10
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: /api/v1/heartbeat
+              path: /api/v2/heartbeat
               port: 8000
             initialDelaySeconds: 30
             periodSeconds: 30

@@ -54,7 +54,7 @@ spec:
   minReplicaCount: 0
   maxReplicaCount: 4
   triggers:
-    - type: aws-sqs
+    - type: aws-sqs-queue
       metadata:
         queueURL: https://sqs.YOUR_AWS_REGION.amazonaws.com/YOUR_ACCOUNT_ID/videosense-jobs
         queueLength: "5"
@@ -73,7 +73,7 @@ spec:
   minReplicaCount: 0
   maxReplicaCount: 4
   triggers:
-    - type: aws-sqs
+    - type: aws-sqs-queue
       metadata:
         queueURL: https://sqs.YOUR_AWS_REGION.amazonaws.com/YOUR_ACCOUNT_ID/videosense-transcribe
         queueLength: "5"
@@ -92,7 +92,7 @@ spec:
   minReplicaCount: 1  # chat depends on it — never scale to zero
   maxReplicaCount: 4
   triggers:
-    - type: aws-sqs
+    - type: aws-sqs-queue
       metadata:
         queueURL: https://sqs.YOUR_AWS_REGION.amazonaws.com/YOUR_ACCOUNT_ID/videosense-summarize
         queueLength: "5"
