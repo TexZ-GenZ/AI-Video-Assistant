@@ -152,6 +152,13 @@ fi
 echo "==> Waiting for cert-manager to be ready ..."
 kubectl rollout status deployment cert-manager cert-manager-webhook cert-manager-cainjector \
   -n cert-manager --timeout=300s
+# Fargate quirk: cert-manager's webhook serves a pod-IP-only cert that the API
+# server rejects. The webhooks only VALIDATE, so failurePolicy: Ignore makes
+# them non-blocking while the controllers keep working normally.
+kubectl patch validatingwebhookconfiguration cert-manager-webhook --type=json \
+  -p '[{"op":"replace","path":"/webhooks/0/failurePolicy","value":"Ignore"}]' || true
+kubectl patch mutatingwebhookconfiguration cert-manager-webhook --type=json \
+  -p '[{"op":"replace","path":"/webhooks/0/failurePolicy","value":"Ignore"}]' || true
 # --aws-vpc-id is REQUIRED on Fargate: there is no EC2 instance metadata, so the
 # controller's VPC discovery fails without it. It's applied as a patch AFTER
 # the manifest (deterministic; the flag lives in the AWS config group).
