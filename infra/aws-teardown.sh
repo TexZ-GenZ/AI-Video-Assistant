@@ -113,6 +113,6 @@ fi
 
 echo
 echo "=============================================================="
-echo " Teardown complete. Remaining monthly cost: ~$2-5 (nothing)."
+echo " Teardown complete. Remaining monthly cost: ~\$2-5 (nothing)."
 echo " Recreate anytime: ./infra/aws-provision.sh && ./k8s/apply.sh"
 echo "=============================================================="
