@@ -101,12 +101,11 @@ for q in jobs transcribe summarize; do
   DLQ_ARN="$(aws sqs get-queue-attributes --queue-url "$DLQ_URL" --region "$REGION" \
     --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)"
 
-  ATTRS="$(mktemp)"
-  cat >"$ATTRS" <<EOF
-{"RedrivePolicy": "{\"deadLetterTargetArn\": \"$DLQ_ARN\", \"maxReceiveCount\": 3}"}
-EOF
-  aws sqs create-queue --queue-name "$QNAME" --region "$REGION" --attributes "file://$ATTRS" >/dev/null
-  rm -f "$ATTRS"
+  # RedrivePolicy is passed inline (no temp file): a git-bash/WSL /tmp path is
+  # unreadable by the Windows aws.exe when passed as file://...
+  REDRIVE="$(printf '{\\"deadLetterTargetArn\\":\\"%s\\",\\"maxReceiveCount\\":3}' "$DLQ_ARN")"
+  aws sqs create-queue --queue-name "$QNAME" --region "$REGION" \
+    --attributes "{\"RedrivePolicy\":\"$REDRIVE\"}" >/dev/null
 done
 
 # ── 6. AWS Load Balancer Controller ────────────────────────────────────────
@@ -116,8 +115,15 @@ if aws iam get-policy --policy-arn "$POLICY_ARN" >/dev/null 2>&1; then
   echo "==> IAM policy $POLICY_NAME exists"
 else
   echo "==> Creating IAM policy $POLICY_NAME ..."
+  # git-bash/WSL paths are unreadable by the Windows aws.exe — convert to
+  # a Windows path when cygpath is available (plain paths elsewhere).
+  if command -v cygpath >/dev/null 2>&1; then
+    POLICY_FILE="file://$(cygpath -m "$SCRIPT_DIR/alb-iam-policy.json")"
+  else
+    POLICY_FILE="file://$SCRIPT_DIR/alb-iam-policy.json"
+  fi
   aws iam create-policy --policy-name "$POLICY_NAME" \
-    --policy-document "file://$SCRIPT_DIR/alb-iam-policy.json" \
+    --policy-document "$POLICY_FILE" \
     --description "AWS Load Balancer Controller for VideoSense" >/dev/null
 fi
 
