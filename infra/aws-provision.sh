@@ -146,6 +146,12 @@ if ! kubectl get deployment cert-manager -n cert-manager >/dev/null 2>&1; then
   echo "==> Installing cert-manager (v1.16.3) ..."
   kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.3/cert-manager.yaml
 fi
+# Wait for cert-manager: the ALB manifest's Certificate/Issuer resources are
+# validated by cert-manager's webhook, which isn't reachable until its pod
+# runs (Fargate startup takes a minute).
+echo "==> Waiting for cert-manager to be ready ..."
+kubectl rollout status deployment cert-manager cert-manager-webhook cert-manager-cainjector \
+  -n cert-manager --timeout=300s
 # --aws-vpc-id is REQUIRED on Fargate: there is no EC2 instance metadata, so the
 # controller's VPC discovery fails without it. It's applied as a patch AFTER
 # the manifest (deterministic; the flag lives in the AWS config group).
@@ -158,6 +164,9 @@ kubectl patch deployment aws-load-balancer-controller -n kube-system --type=json
   -p "[{\"op\":\"replace\",\"path\":\"/spec/template/spec/containers/0/args\",\"value\":[\"--cluster-name=$CLUSTER\",\"--ingress-class=alb\",\"--aws-vpc-id=$ALB_VPC_ID\"]}]"
 # The IngressClass ("alb") ships as a separate release asset.
 kubectl apply -f https://github.com/kubernetes-sigs/aws-load-balancer-controller/releases/download/v2.11.0/v2_11_0_ingclass.yaml
+# Wait for the controller so the ALB is provisioned when apply.sh runs.
+echo "==> Waiting for the ALB controller to be ready ..."
+kubectl rollout status deployment aws-load-balancer-controller -n kube-system --timeout=300s || true
 
 # ── 7. EFS (whisper cache + chroma data) ───────────────────────────────────
 VPC_ID="$(aws eks describe-cluster --name "$CLUSTER" --region "$REGION" \
