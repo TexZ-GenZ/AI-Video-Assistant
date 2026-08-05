@@ -84,6 +84,13 @@ spec:
                 name: videosense-config
             - secretRef:
                 name: videosense-secrets
+          env:
+            - name: COOKIES_FILE
+              value: /etc/cookies/cookies.txt
+          volumeMounts:
+            - name: youtube-cookies
+              mountPath: /etc/cookies
+              # NOT read-only: yt-dlp updates the cookie file after downloads
           resources:
             requests:
               cpu: 500m
@@ -91,3 +98,7 @@ spec:
             limits:
               cpu: "1"
               memory: 2Gi
+      volumes:
+        - name: youtube-cookies
+          secret:
+            secretName: youtube-cookies

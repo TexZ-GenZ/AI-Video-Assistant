@@ -51,6 +51,18 @@ def download_youtube_url(url: str, workdir: str) -> str:
         }],
         'quiet': True,
     }
+
+    # YouTube bot-checks cloud/datacenter IPs — a session cookie file
+    # (COOKIES_FILE, mounted as a k8s secret in prod) gets past the
+    # "Sign in to confirm you're not a bot" wall. kubelet mounts secret
+    # volumes read-only, but yt-dlp wants to update the cookie jar — so
+    # copy it into the writable workdir first.
+    cookies_file = os.getenv("COOKIES_FILE")
+    if cookies_file and os.path.exists(cookies_file):
+        writable_cookies = os.path.join(workdir, "cookies.txt")
+        shutil.copyfile(cookies_file, writable_cookies)
+        ydl_opts['cookiefile'] = writable_cookies
+
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info_dict = ydl.extract_info(url, download=True)
         filename = ydl.prepare_filename(info_dict).replace('.webm', '.wav').replace('.m4a', '.wav')

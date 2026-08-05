@@ -4,7 +4,8 @@ downloads/
 __pycache__/
 uv.lock
 vector_db/
-
+cookies.txt
+.k8s-patch-*.json
 # SQLite job store (generated at runtime)
 jobs.db
 

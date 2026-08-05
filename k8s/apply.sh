@@ -54,6 +54,16 @@ kubectl create secret generic videosense-secrets \
   --from-literal="SARVAM_API_KEY=$sarvam_key" \
   --dry-run=client -o yaml | kubectl apply -f -
 
+# ── 2b. YouTube cookies (optional — only if cookies.txt exists locally) ────
+if [ -f "$SCRIPT_DIR/../cookies.txt" ]; then
+  echo "==> Creating youtube-cookies secret ..."
+  kubectl create secret generic youtube-cookies \
+    --from-file="cookies.txt=$SCRIPT_DIR/../cookies.txt" \
+    --dry-run=client -o yaml | kubectl apply -f -
+else
+  echo "==> No cookies.txt found — YouTube downloads will use anonymous IPs (may be bot-blocked)"
+fi
+
 # ── 3. Manifests with placeholder substitution ─────────────────────────────
 echo "==> Applying manifests ..."
 for f in "$SCRIPT_DIR"/*.yaml; do

@@ -2,7 +2,7 @@
 fastapi
 uvicorn
 python-multipart
-yt-dlp
+yt-dlp[default]   # [default] bundles yt-dlp-ejs — YouTube's EJS challenge solver scripts
 pydub
 audioop-lts  # pydub on Python 3.13 (audioop removed from stdlib)
 boto3
