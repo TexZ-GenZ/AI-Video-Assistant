@@ -175,9 +175,11 @@ else
   echo "==> EFS filesystem $FS_ID exists"
 fi
 
-# Mount targets in the private subnets (where Fargate pods run)
+# Mount targets in the private subnets (where Fargate pods run).
+# eksctl 0.229+ tags subnets with eksctl.cluster.k8s.io/v1alpha1/cluster-name
+# (the older kubernetes.io/cluster/<name> tag is no longer set).
 SUBNETS="$(aws ec2 describe-subnets --region "$REGION" \
-  --filters "Name=tag:kubernetes.io/cluster/$CLUSTER,Values=shared" \
+  --filters "Name=tag:eksctl.cluster.k8s.io/v1alpha1/cluster-name,Values=$CLUSTER" \
             "Name=tag:kubernetes.io/role/internal-elb,Values=1" \
   --query 'Subnets[].SubnetId' --output text)"
 if [ -z "$SUBNETS" ]; then
@@ -209,7 +211,8 @@ AP_MODELS="$(aws efs describe-access-points --region "$REGION" \
   --query "AccessPoints[?Name=='videosense-whisper-cache'].AccessPointId" --output text)"
 if [ -z "$AP_MODELS" ]; then
   echo "==> Creating EFS access point (whisper cache) ..."
-  AP_MODELS="$(aws efs create-access-point --region "$REGION" \
+  # MSYS_NO_PATHCONV: git-bash would rewrite /models into a Windows path
+  AP_MODELS="$(MSYS_NO_PATHCONV=1 aws efs create-access-point --region "$REGION" \
     --file-system-id "$FS_ID" --client-token "videosense-models-$(date +%s)" \
     --tags "Key=Name,Value=videosense-whisper-cache" \
     --posix-user "Uid=0,Gid=0" \
@@ -221,7 +224,7 @@ AP_CHROMA="$(aws efs describe-access-points --region "$REGION" \
   --query "AccessPoints[?Name=='videosense-chroma'].AccessPointId" --output text)"
 if [ -z "$AP_CHROMA" ]; then
   echo "==> Creating EFS access point (chroma data) ..."
-  AP_CHROMA="$(aws efs create-access-point --region "$REGION" \
+  AP_CHROMA="$(MSYS_NO_PATHCONV=1 aws efs create-access-point --region "$REGION" \
     --file-system-id "$FS_ID" --client-token "videosense-chroma-$(date +%s)" \
     --tags "Key=Name,Value=videosense-chroma" \
     --posix-user "Uid=0,Gid=0" \
