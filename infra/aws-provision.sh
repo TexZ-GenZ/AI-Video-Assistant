@@ -128,7 +128,7 @@ else
 fi
 
 if eksctl get iamserviceaccount --cluster "$CLUSTER" --region "$REGION" \
-    --name aws-load-balancer-controller --namespace kube-system >/dev/null 2>&1; then
+    --name aws-load-balancer-controller --namespace kube-system 2>/dev/null | grep -q aws-load-balancer-controller; then
   echo "==> IRSA aws-load-balancer-controller exists"
 else
   echo "==> Creating IRSA aws-load-balancer-controller ..."
@@ -139,7 +139,7 @@ else
 fi
 
 echo "==> Installing AWS Load Balancer Controller (v2.11.0) ..."
-kubectl apply -f https://github.com/kubernetes-sigs/aws-load-balancer-controller/releases/download/v2.11.0/v2_11_0_crds.yaml
+# The full manifest includes the CRDs (no separate crds asset in this release).
 curl -fsSL https://github.com/kubernetes-sigs/aws-load-balancer-controller/releases/download/v2.11.0/v2_11_0_full.yaml \
   | sed "s/your-cluster-name/$CLUSTER/g" \
   | kubectl apply -f -
@@ -225,7 +225,7 @@ fi
 
 # ── 8. EFS CSI driver (EKS managed add-on) ─────────────────────────────────
 if eksctl get iamserviceaccount --cluster "$CLUSTER" --region "$REGION" \
-    --name efs-csi-controller-sa --namespace kube-system >/dev/null 2>&1; then
+    --name efs-csi-controller-sa --namespace kube-system 2>/dev/null | grep -q efs-csi-controller-sa; then
   echo "==> IRSA efs-csi-controller-sa exists"
 else
   echo "==> Creating IRSA efs-csi-controller-sa ..."
@@ -250,7 +250,7 @@ echo "==> Installing KEDA (core, v2.16.1) ..."
 kubectl apply -f https://github.com/kedacore/keda/releases/download/v2.16.1/keda-2.16.1-core.yaml
 
 if eksctl get iamserviceaccount --cluster "$CLUSTER" --region "$REGION" \
-    --name keda-operator --namespace keda >/dev/null 2>&1; then
+    --name keda-operator --namespace keda 2>/dev/null | grep -q keda-operator; then
   echo "==> IRSA keda-operator exists"
 else
   echo "==> Creating IRSA keda-operator (SQS + CloudWatch read) ..."
