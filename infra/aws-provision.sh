@@ -39,7 +39,7 @@ fi
 
 # Fargate profiles: one per namespace that hosts pods. The default profile
 # (namespace: default) is created by --fargate above.
-for ns in kube-system keda; do
+for ns in kube-system keda cert-manager; do
   if ! eksctl get fargateprofile --cluster "$CLUSTER" --region "$REGION" --name "$ns" >/dev/null 2>&1; then
     echo "==> Adding Fargate profile for namespace '$ns' ..."
     eksctl create fargateprofile --cluster "$CLUSTER" --region "$REGION" --name "$ns" --namespace "$ns"
@@ -140,6 +140,12 @@ fi
 
 echo "==> Installing AWS Load Balancer Controller (v2.11.0) ..."
 # The full manifest includes the CRDs (no separate crds asset in this release).
+# cert-manager MUST be installed first — the webhook's Certificate/Issuer
+# resources need its CRDs.
+if ! kubectl get deployment cert-manager -n cert-manager >/dev/null 2>&1; then
+  echo "==> Installing cert-manager (v1.16.3) ..."
+  kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.3/cert-manager.yaml
+fi
 curl -fsSL https://github.com/kubernetes-sigs/aws-load-balancer-controller/releases/download/v2.11.0/v2_11_0_full.yaml \
   | sed "s/your-cluster-name/$CLUSTER/g" \
   | kubectl apply -f -
