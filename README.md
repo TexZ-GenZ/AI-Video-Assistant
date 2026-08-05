@@ -64,16 +64,31 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-    A["1 · Paste a YouTube URL or upload a file"] --> B["2 · Ingestion API creates the job in DynamoDB<br/>and publishes to the jobs queue"]
-    B --> C["3 · Ingestion worker downloads / converts the audio,<br/>splits it into 10-minute WAV chunks → S3"]
-    C --> D["4 · Publishes to the transcribe queue"]
-    D --> E["5 · Transcription worker: faster-whisper (English)<br/>or Sarvam AI (Hindi → English) → transcript → S3"]
-    E --> F["6 · Publishes to the summarize queue"]
-    F --> G["7 · Summarization worker runs the LLM passes:<br/>title, map-reduce summary, action items, key info, questions"]
-    G --> H["8 · Transcript is chunked, embedded (Mistral),<br/>and indexed into a PER-VIDEO Chroma collection (MMR, k=4)"]
-    H --> I["9 · Results written to DynamoDB — job status: done"]
-    I --> J["10 · Chat: the ask endpoint retrieves from Chroma<br/>and answers, grounded in the video only"]
+    A["1 · Paste a link / upload a file"] --> B["2 · Job created in DynamoDB<br/>→ jobs queue"]
+    B --> C["3 · Audio → 10-min WAV chunks → S3"]
+    C --> D["4 · → transcribe queue"]
+    D --> E["5 · Transcript (whisper / Sarvam) → S3"]
+    E --> F["6 · → summarize queue"]
+    F --> G["7 · Mistral passes: summary, actions, facts, questions"]
+    G --> H["8 · Embed + index into per-video Chroma collection"]
+    H --> I["9 · Results to DynamoDB — status: done"]
+    I --> J["10 · Chat: grounded answer from retrieval"]
 ```
+
+Step by step:
+
+1. **Paste a YouTube URL or upload a file.** The ingestion API streams uploads to S3 (`uploads/{file_id}`).
+2. **The job is created in DynamoDB** (`status: processing`) and a message is published to the **jobs queue**.
+3. **The ingestion worker** downloads the video (yt-dlp) or fetches the staged upload, converts it to 16 kHz mono WAV, and splits it into 10-minute chunks → `jobs/{job_id}/chunks/` in S3.
+4. It publishes to the **transcribe queue** and the job progress updates to *"Queued for transcription"*.
+5. **The transcription worker** downloads the chunks in order and transcribes them — faster-whisper for English, Sarvam AI (translated to English) for Hindi. The joined transcript is stored at `jobs/{job_id}/transcript.txt`.
+6. It publishes to the **summarize queue**.
+7. **The summarization worker** runs the LangChain LLM passes: title, map-reduce summary, action items, key information, and questions raised.
+8. The transcript is chunked, embedded with **Mistral**, and indexed into a **per-video ChromaDB collection** (MMR retrieval, k=4). Re-indexing never duplicates chunks — the collection is reset first.
+9. Results are written to DynamoDB and the job flips to `done`.
+10. **Chat.** `POST /api/process/{id}/ask` retrieves the most relevant chunks and the LLM answers **grounded in the video only** — if the answer isn't in the context, it says so.
+
+Each queue has a **DLQ** (`maxReceiveCount=3`): crashed workers redrive; business failures are recorded on the job instead.
 
 ## Why this design
 
