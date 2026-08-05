@@ -146,8 +146,13 @@ if ! kubectl get deployment cert-manager -n cert-manager >/dev/null 2>&1; then
   echo "==> Installing cert-manager (v1.16.3) ..."
   kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.3/cert-manager.yaml
 fi
+# --vpc-id is REQUIRED on Fargate: there is no EC2 instance metadata, so the
+# controller's VPC discovery fails without it.
+ALB_VPC_ID="$(aws eks describe-cluster --name "$CLUSTER" --region "$REGION" \
+  --query 'cluster.resourcesVpcConfig.vpcId' --output text)"
 curl -fsSL https://github.com/kubernetes-sigs/aws-load-balancer-controller/releases/download/v2.11.0/v2_11_0_full.yaml \
-  | sed "s/your-cluster-name/$CLUSTER/g" \
+  | sed -e "s/your-cluster-name/$CLUSTER/g" \
+        -e "s|--cluster-name=$CLUSTER|--cluster-name=$CLUSTER\\n            - --vpc-id=$ALB_VPC_ID|" \
   | kubectl apply -f -
 
 # ── 7. EFS (whisper cache + chroma data) ───────────────────────────────────
@@ -256,7 +261,10 @@ fi
 
 # ── 9. KEDA (SQS autoscaling) ──────────────────────────────────────────────
 echo "==> Installing KEDA (core, v2.16.1) ..."
-kubectl apply -f https://github.com/kedacore/keda/releases/download/v2.16.1/keda-2.16.1-core.yaml
+# Server-side apply: client-side apply stores the whole object in an
+# annotation, and KEDA's scaledjobs CRD exceeds the 256 KiB annotation limit.
+kubectl apply --server-side \
+  -f https://github.com/kedacore/keda/releases/download/v2.16.1/keda-2.16.1-core.yaml
 
 if eksctl get iamserviceaccount --cluster "$CLUSTER" --region "$REGION" \
     --name keda-operator --namespace keda 2>/dev/null | grep -q keda-operator; then
