@@ -53,6 +53,7 @@ spec:
     kind: Deployment
   minReplicaCount: 0
   maxReplicaCount: 4
+  cooldownPeriod: 60
   triggers:
     - type: aws-sqs-queue
       metadata:
@@ -72,6 +73,7 @@ spec:
     kind: Deployment
   minReplicaCount: 0
   maxReplicaCount: 4
+  cooldownPeriod: 60
   triggers:
     - type: aws-sqs-queue
       metadata:
@@ -91,6 +93,7 @@ spec:
     kind: Deployment
   minReplicaCount: 1  # chat depends on it — never scale to zero
   maxReplicaCount: 4
+  cooldownPeriod: 60
   triggers:
     - type: aws-sqs-queue
       metadata:
